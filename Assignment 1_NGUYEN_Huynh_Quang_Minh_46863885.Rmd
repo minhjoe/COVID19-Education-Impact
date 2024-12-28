@@ -1,0 +1,1101 @@
+---
+title: "Assessment 1 - COVID-19 impact on digital learning"
+author: "Huynh Quang Minh NGUYEN _ 46863885"
+output: word_document
+date: "2024-04-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Pre-processing
+
+## Import Libraries
+
+```         
+install.packages("rmarkdown")
+install.packages("dplyr")
+install.packages("readr")
+```
+
+## Use Libraries
+
+```{r}
+library(knitr)
+library(readr)
+library(dplyr)
+```
+
+## Set File Paths
+
+```{r}
+engagement_data <- c( 
+     "F:/OneDrive - Macquarie University/Desktop/Uni/Cung/Master BA/Sem 2/Technique in Business Analytics/Assessment 1- Data and Template-20240326/Engagement Data/1000.csv", 
+     "F:/OneDrive - Macquarie University/Desktop/Uni/Cung/Master BA/Sem 2/Technique in Business Analytics/Assessment 1- Data and Template-20240326/Engagement Data/1039.csv",
+     "F:/OneDrive - Macquarie University/Desktop/Uni/Cung/Master BA/Sem 2/Technique in Business Analytics/Assessment 1- Data and Template-20240326/Engagement Data/1044.csv",
+     "F:/OneDrive - Macquarie University/Desktop/Uni/Cung/Master BA/Sem 2/Technique in Business Analytics/Assessment 1- Data and Template-20240326/Engagement Data/1052.csv",
+     "F:/OneDrive - Macquarie University/Desktop/Uni/Cung/Master BA/Sem 2/Technique in Business Analytics/Assessment 1- Data and Template-20240326/Engagement Data/1131.csv"
+ ) 
+
+dis_info <- read.csv("F:/OneDrive - Macquarie University/Desktop/Uni/Cung/Master BA/Sem 2/Technique in Business Analytics/Assessment 1- Data and Template-20240326/districts_info.csv")
+
+products_info = read.csv ("F:/OneDrive - Macquarie University/Desktop/Uni/Cung/Master BA/Sem 2/Technique in Business Analytics/Assessment 1- Data and Template-20240326/products_info.csv")
+
+```
+
+
+```{r}
+## Combine Engagement Data
+
+engagement_data <- lapply(engagement_data, read_csv)
+
+engagement_data <- lapply(engagement_data, function(df) {
+  mutate(df, lp_id = as.numeric(lp_id))
+})
+
+engagement_data_combined <- bind_rows(engagement_data, .id = "district_id") 
+
+rm(engagement_data) 
+
+# Define the replacements
+replace_id <- c(1, 2, 3, 4, 5)
+replace_key <- c(1000, 1039, 1044, 1052, 1131)
+
+# Replace the district IDs based on the specified mappings
+engagement_data_combined$district_id <- replace_key[match(engagement_data_combined$district_id, replace_id)]
+```
+
+> You may find a lot of CSV file paths in the 'engagement_files' directory. These CSV files include number IDs in their titles, which suggests that they could contain engagement data. The CSV files listed in "engagement_files" are then added to a list named "engagement_data" by using the 'lapply' function. Next, the data from the 'engagement_data' list is merged into a single data frame named 'engagement_combined' using the 'bind_rows' function. In addition, the '.id' option is set to "district_id" so that the resulting data frame has an identification for every data source in a CSV file. The 'engagement_data' list is then deleted using the 'rm' function, maybe to free up memory once the data is combined into 'engagement_combined.
+
+
+## Data Cleaning and Wrangling Steps
+
+### products_info
+- Summary of Data
+
+```{r}
+head(products_info) #show the first 6 rows of the data 
+```
+- Check LP.ID, URL Column with unique function.
+
+> The and LP.ID, URL Column show 372 unique observations which is equal the number of observations in the products_info dataset. Therefore, it showcase that there is no missing value in this column
+
+- Check Product.Name Column with unique function
+
+> The URL Column show 371 unique values which is approximately equal the number of observations in the products_info dataset. Therefore, it showcase that there is no missing value in this column with no blank or N/A values.
+
+- Check Provider.Company.Name Column with unique function
+
+> The URL Column show 291 unique values. Therefore, it showcase that there are some companies provider that are more famous/in-demand than other companies in this column.
+
+- Check Sector.s Column
+
+```{r}
+unique(products_info$Sector.s) #see unique Sector.s
+```
+
+> **Error:** There were some mistake in the "Sector.s" column, where values werer incorrectly type wrong as "**PreK-122**", "**PreK-112**", "**PPreK-12**" instead of "**PreK-12**".
+
+-   Replace incorrect values with the correct name 
+
+```{r}
+products_info <- products_info %>%
+  mutate(Sector.s. = replace(Sector.s., Sector.s. %in% c("PreK-122", "PreK-112", "PPreK-12", "pre kindergarten to year 12"  ), "PreK-12"))
+products_info <- products_info %>%
+  mutate(Sector.s. = replace(Sector.s., Sector.s. == "PreK-12; Higher; Corporate" , "PreK-12; Higher Ed; Corporate"))
+products_info <- products_info %>%
+  mutate(Sector.s. = replace(Sector.s., Sector.s. == "pre kindergarten to yr 12" , "pre kindergarten to year 12"))
+products_info <- products_info %>%
+  mutate(Sector.s. = replace(Sector.s., Sector.s. %in%c("","not sure") , NA))
+```
+
+-   Check the unique values in the 'Sector' column
+
+> Check again to make sure that all the wrong values have been replaced with the correct ones.
+
+```{r}
+unique(products_info$Sector.s.)
+
+```
+
+- Check Primary.Essential.Function Column
+
+```{r}
+unique(products_info$Primary.Essential.Function) #see unique Primary.Essential.Function
+```
+
+> There are 37 unique values, in which we have 3 main categorical: SDO, LC, CM.
+
+```{r}
+products_info <- products_info %>%
+  mutate(Primary.Essential.Function = replace(Primary.Essential.Function, Primary.Essential.Function == "", NA))
+products_info <- products_info %>%
+  mutate(primary_function = sub(" - .*$", "", Primary.Essential.Function))
+products_info <- products_info %>%
+  mutate(func = gsub("^[A-Z]+ - ", "", Primary.Essential.Function))
+```
+
+> Check again to make sure that all the wrong values have been replaced with the correct ones.
+
+```{r}
+unique(products_info$Primary.Essential.Function)
+```
+
+- Check Missing values
+
+```{r}
+missing_products_info <- products_info %>%
+  summarise_all(~ sum(is.na(.)))
+print(missing_products_info)
+```
+
+> We can clearly observe that there are missing values in county_connections_ratio, pct_free.reduced and pp_total_raw while state - locale and pct_blank.hispanic has the same NA values. Therefore, I can suppose that values which are NA in state - locale and pct_blank.hispanic will result a  NA values on the rest. Hence, I will handle these NA values in these columns first by deleting them.
+
+```{r}
+products_info <- products_info %>%
+  filter(!is.na(Sector.s.))%>%
+  filter(!is.na(Primary.Essential.Function))
+```
+
+```{r}
+missing_products_info <- products_info %>%
+  summarise_all(~ sum(is.na(.)))
+print(missing_products_info)
+```
+
+-   Summary of cleaned products_info file data
+
+```{r}
+summary(products_info)
+```
+
+### districts_info
+
+- Summary of Data
+
+```{r}
+head(dis_info) #show the first 6 rows of the data 
+```
+
+-  Check district_id Column by unique function
+
+
+> There are 232 unique values in this column, which demonstrate 232 district_id appears in this dataset 
+
+-   Check the 'state' column
+
+```{r}
+unique(dis_info$state) #see unique state
+```
+
+> **Error:** The "state" column has lot of incorrect type name, where some values were incorrectly entered as "**UTAH**" "**uTtah**" "**Utaah**"  "**New York**" "**NY City**" instead of "**Utah**" and "**New York City** with "**Ohi0**" & "**ConnectiCUT**"as well. Also, we observe that there are "**don\x92t know**" & "**NaN**"value which I will replace to NA values.
+
+-   Replace rows with specific values in the 'state' column
+
+```{r}
+dis_info <- dis_info %>%
+  mutate(state = replace(state, state %in% c("UTAH", "uTtah", "Utaah"), "Utah"))
+dis_info <- dis_info %>%
+  mutate(state = replace(state, state %in% c("New York", "NY City", "New Y0rk"), "New York City"))
+dis_info <- dis_info %>%
+  mutate(state = replace(state, state %in% c("Ohio", "Ohi0"), "Ohio"))
+dis_info <- dis_info %>%
+  mutate(state = replace(state, state == "ConnectiCUT", "Connecticut"))
+dis_info <- dis_info %>%
+  mutate(state = replace(state, state == "whereabouts", NA))
+dis_info <- dis_info %>%
+  mutate(state = replace(state, state == "NaN" , NA))
+dis_info <- dis_info %>%
+  mutate(state = replace(state, state == "don\x92t know", NA))
+
+```
+
+> Check again to make sure that all the wrong values have been replaced with the correct ones.
+
+```{r}
+unique(dis_info$state)
+```
+
+-   Check the 'locale' column
+
+```{r}
+unique(dis_info$locale) #see unique locale
+```
+
+> **Error:** There were some spelling mistakes in the "locale" column, entered as "**Sub**" "**Cit**" instead of "**Suburban** and "**City**.
+
+-   Replace error values with the correct values in the 'locale' column
+
+```{r}
+dis_info <- dis_info %>%
+  mutate(locale = replace(locale, locale %in% c("Cit", "C1ty"), "City"))
+
+dis_info <- dis_info %>%
+  mutate(locale = replace(locale, locale %in% c("Sub", "Suburb"), "Suburban"))
+
+dis_info <- dis_info %>%
+  mutate(locale = replace(locale, locale == "NaN"
+                           ,NA)) 
+```
+
+> Check again to make sure that all the wrong values have been replaced with the correct ones.
+
+```{r}
+unique(dis_info$locale) #see unique locale
+```
+> There are 4 distinct value which is known as: Suburb, City, Rural, Town
+
+- Check the 'pct_black.hispanic' column
+
+```{r}
+sort(unique(dis_info$pct_black.hispanic)) #see unique pct_black.hispanic
+```
+- Replace "NaN" values to NA values
+
+```{r}
+dis_info <- dis_info %>%
+  mutate(pct_black.hispanic = replace(pct_black.hispanic, pct_black.hispanic == "NaN"
+                           ,NA))
+dis_info <- dis_info %>%
+  mutate(pct_black.hispanic = replace(pct_black.hispanic, pct_black.hispanic == ""
+                           ,NA))
+```
+
+> Check again to make sure that all the wrong values have been replaced with the correct ones.
+
+```{r}
+sort(unique(dis_info$pct_black.hispanic)) #see unique pct_black.hispanic
+```
+-   Check the 'pct_free.reduced' column
+
+```{r}
+sort(unique(dis_info$pct_free.reduced)) #see unique pct_free.reduced
+```
+- Replace "NaN" values to NA values
+
+```{r}
+dis_info <- dis_info %>%
+  mutate(pct_free.reduced = replace(pct_free.reduced, pct_free.reduced == "NaN"
+                           ,NA))
+dis_info <- dis_info %>%
+  mutate(pct_free.reduced = replace(pct_free.reduced, pct_free.reduced == ""
+                           ,NA))
+```
+
+> Check again to make sure that all the wrong values have been replaced with the correct ones.
+
+```{r}
+sort(unique(dis_info$pct_free.reduced)) #see unique pct_free.reduced
+```
+
+-   Check the 'county_connections_ratio' column
+
+```{r}
+sort(unique(dis_info$county_connections_ratio)) #see unique county_connections_ratio
+```
+- Replace "NaN" values to NA values
+
+```{r}
+dis_info <- dis_info %>%
+  mutate(county_connections_ratio = replace(county_connections_ratio, county_connections_ratio == "NaN"
+                           ,NA))
+dis_info <- dis_info %>%
+  mutate(county_connections_ratio = replace(county_connections_ratio, county_connections_ratio == ""
+                           ,NA))
+```
+
+> Check again to make sure that all the wrong values have been replaced with the correct ones.
+
+```{r}
+sort(unique(dis_info$county_connections_ratio)) #see unique county_connections_ratio
+```
+-   Check the 'pp_total_raw' column
+
+```{r}
+sort(unique(dis_info$pp_total_raw)) #see unique pp_total_raw
+```
+- Replace "NaN" values to NA values
+
+```{r}
+dis_info <- dis_info %>%
+  mutate(pp_total_raw = replace(pp_total_raw, pp_total_raw == "NaN"
+                           ,NA))
+dis_info <- dis_info %>%
+  mutate(pp_total_raw = replace(pp_total_raw, pp_total_raw == ""
+                           ,NA))
+```
+
+> Check again to make sure that all the wrong values have been replaced with the correct ones.
+
+```{r}
+sort(unique(dis_info$pp_total_raw)) #see unique pp_total_raw
+```
+
+-   Check Missing Values
+
+```{r}
+missing_dis_info <- dis_info %>%
+  summarise_all(~ sum(is.na(.)))
+print(missing_dis_info)
+```
+
+> There are lots of blank value in county_connections_ratio, pct_free.reduced and pp_total_raw while state - locale and pct_blank.hispanic has the same NA values. Therefore, I can suppose that values which are NA in state - locale and pct_blank.hispanic will result a  NA values on the rest. Hence, I will handle these NA values in these columns first by deleting them.
+
+```{r}
+dis_info <- dis_info %>%
+  filter(!is.na(state) | !is.na(locale) | !is.na(`pct_black.hispanic`))
+```
+
+```{r}
+missing_dis_info <- dis_info %>%
+  summarise_all(~ sum(is.na(.)))
+print(missing_dis_info)
+```
+
+> The last 3 columns still have missing values and need to be handled correctly. Particularly, as "**county_connections_ratio**" only have 2 unique values so the NA values will be replaced with the most apperance value in this column by "**mode method**". On the other side, "**pct_free.reduced**" and "**pp_total_raw**" will be replaced with the mode values.
+
+```{r}
+# Custom function to find the mode for character data
+find_mode_char <- function(x) {
+  freq_table <- table(x)
+  max_freq <- max(freq_table)
+  mode_values <- names(freq_table)[freq_table == max_freq]
+  return(mode_values)
+}
+
+# Replace NA values with the mode for character data with county_connections_ratio
+mode_values <- find_mode_char(dis_info$county_connections_ratio)
+dis_info$county_connections_ratio[is.na(dis_info$county_connections_ratio)] <- mode_values[1]  # Use the first mode value
+
+# Replace NA values with the mode for character data with pct_free.reduced
+mode_values <- find_mode_char(dis_info$pct_free.reduced)
+dis_info$pct_free.reduced[is.na(dis_info$pct_free.reduced)] <- mode_values[1]  # Use the first mode value
+
+# Replace NA values with the mode for character data with pp_total_raw
+mode_values <- find_mode_char(dis_info$pp_total_raw)
+dis_info$pp_total_raw[is.na(dis_info$pp_total_raw)] <- mode_values[1]  # Use the first mode value
+```
+
+> Check again to make sure that all the missing values have been solved.
+
+```{r}
+missing_dis_info <- dis_info %>%
+  summarise_all(~ sum(is.na(.)))
+print(missing_dis_info)
+```
+
+-   Summary of cleaned districts_info file data
+
+```{r}
+summary(dis_info)
+```
+
+### engagement_combined
+
+- Summary "Engagement_data_combined" file
+
+```{r}
+head(engagement_data_combined) #show the top 6 rows of each column in the dataframe
+```
+
+-   Check the 'district_id' column
+
+```{r}
+sort(unique(engagement_data_combined$district_id)) #see unique district_id
+```
+-   Check the 'time' column by unique function and Convert 'time' column to datetime format
+
+```{r}
+summary(engagement_data_combined)
+```
+
+```{r}
+engagement_data_combined$time <- as.Date(engagement_data_combined$time, format = "%d/%m/%Y")
+```
+
+```{r}
+summary(engagement_data_combined)
+```
+
+-   Check the the unique year
+
+> To cope with the damaged time values, we need to find the unique values in the data frame "engagement_data_combined" and preserve them in "unique_years". 
+
+```{r}
+sort(unique(format(engagement_data_combined$time, "%Y"))) 
+```
+
+```{r}
+engagement_data_combined <- engagement_data_combined %>%
+  filter(!is.na(time))
+
+unique(format(engagement_data_combined$time, "%Y"))
+
+```
+
+> **Error**: It is evident that **2050**, **2033**, and **2044** symbolise the future, whereas **1020** and **2044** reflect the past. We must deal with these values by removing them from our dataset in order to get an adequate data selection since the time values are not continuous. **2020** and "**2022**" are so similar that more investigation will be required to determine whether or not this might have an impact on our dataset.
+
+-   Drop irrelevant rows
+
+```{r}
+years_to_drop<- c("1020", "2044", "2050", "2033")
+engagement_data_combined <- engagement_data_combined[!(format(engagement_data_combined$time, "%Y") %in% years_to_drop), ]
+```
+
+```{r}
+sort(unique(format(engagement_data_combined$time, "%m/%Y")))
+```
+
+```{r}
+jan2022_data <- engagement_data_combined[format(engagement_data_combined$time, "%m/%Y") == "01/2022", ]
+```
+
+> When observing the “time” column, we can see that most of the data is in 2020 and we do not have any data for 2021 while having 1 column of data in January of 2022. That mean the time value is not continuous and it is not efficient enough to analyze for 2022. Therefore, we will delete the 2022’s value.
+
+```{r}
+years_drop <- c("2022")
+engagement_data_combined <- engagement_data_combined[!(format(engagement_data_combined$time, "%Y") %in% years_drop), ]
+```
+
+> Check again to make sure that all the "time" column have been successfully updated.
+
+```{r}
+sort(unique(format(engagement_data_combined$time, "%m/%Y"))) #see unique each month in the year
+sort(unique(format(engagement_data_combined$time, "%Y")))
+```
+
+- Check the "lp_id", "pct_access" and "engagement_index" column by unique function 
+
+- Replace "NaN" values to NA values
+```{r}
+engagement_data_combined <- engagement_data_combined %>%
+  mutate(district_id = replace(district_id, district_id == "NaN"
+                           ,NA))
+dis_info <- dis_info %>%
+  mutate(pct_free.reduced = replace(pct_free.reduced, pct_free.reduced == ""
+                           ,NA))
+```
+
+> Check again to make sure that all the wrong values have been replaced with the correct ones.
+
+```{r}
+sort(unique(dis_info$pct_free.reduced)) #see unique pct_free.reduced
+```
+
+- Checking missing values
+```{r}
+miss_engaged_data <- engagement_data_combined  %>%
+  summarise_all(~ sum(is.na(.)))
+print(miss_engaged_data)
+
+miss_percentage <- engagement_data_combined %>% 
+     summarise_all(~ mean(is.na(.)) * 100) 
+print(miss_percentage) 
+```
+> The data table (above) has missing rates in the following three columns: "lp_id," "pct_access," and "engagement_index." The column with the highest proportion of missing data is "engagement_index". Therefore, in the "engagement_index" column, the mean value will now be added to any missing data.
+
+-   Handle Missing Values.
+
+> We will replace missing values with the mean value in that column.
+
+```{r}
+engagement_data_combined <- engagement_data_combined %>%
+     mutate_if(is.numeric, ~ ifelse(is.na(.), mean(., na.rm = TRUE), .))
+```
+
+> Check whether the problem have been fixed or not.
+
+```{r}
+missing_percentage <- engagement_data_combined %>%
+     summarise_all(~ mean(is.na(.)) * 100)
+print(missing_percentage)
+```
+
+> Summary function to take a look at value that have been cleaned 
+
+```{r}
+summary(engagement_data_combined)
+```
+- Removing the data list that not in use
+```{r}
+rm(miss_percentage)
+rm(missing_dis_info)
+rm(missing_products_info)
+rm(miss_engaged_data)
+rm(jan2022_data)
+```
+
+> The 'rm' function is used to remove the data list that not in use.
+
+- Summary and Check of cleaned dataset
+
+```{r}
+str(engagement_data_combined)
+str(dis_info)
+str(products_info)
+```
+> There are **different format** of column between each file so we need to make sure that the **format across the file is similar**, therefore, it will be more easily for us to merge the file later without losing the value.
+
+```{r}
+#products_info file
+
+colnames(products_info)[1] <-"lp_id" #changing column name from "LP.ID" to "lp_id"
+products_info <- products_info %>%
+mutate(lp_id = as.numeric(lp_id))
+
+#dis_info file
+dis_info <- dis_info %>%
+mutate(district_id = as.numeric(district_id))
+```
+
+- Summary and recheck of cleaned dataset
+
+```{r}
+str(engagement_data_combined)
+str(dis_info)
+str(products_info)
+```
+
+## Save Files
+
+### cleaned_engagement_data.csv
+
+```{r}
+write_csv(engagement_data_combined, "cleaned_engagement_data_combined.csv")
+```
+
+### cleaned_districts_info.csv
+
+```{r}
+write_csv(dis_info, "cleaned_dis_info.csv")
+```
+
+### cleaned_products_info.csv
+
+```{r}
+write_csv(products_info, "cleaned_products_info.csv")
+```
+
+### Merged_clean_file
+```{r}
+engagement_dis_info <- merge(engagement_data_combined, dis_info, by = "district_id", all=TRUE)
+
+engagement_product_info <- merge(engagement_data_combined, products_info, by = "lp_id", all=TRUE)
+
+total_cleaned_dataset <- merge(engagement_product_info, dis_info , by = "district_id", all=TRUE)
+
+write_csv(engagement_dis_info, "engagement_dis_info.csv")
+write_csv(engagement_product_info, "engagement_product_info.csv")
+write_csv(total_cleaned_dataset, "total_cleaned_dataset.csv")
+```
+
+
+\newpage
+
+
+# Data Visualisation
+
+## Import Libraries
+
+```         
+install.packages("ggplot2")
+```   
+## Use Libraries
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(ggthemes) 
+library(lubridate)
+library(stringr)
+library(scales)
+```
+
+## Set file path
+
+```{r}
+cleaned_districts_info <- read.csv("F:/OneDrive - Macquarie University/Desktop/Uni/Cung/Master BA/Sem 2/Technique in Business Analytics/cleaned_dis_info.csv")
+
+cleaned_engagement_combined <- read.csv("F:/OneDrive - Macquarie University/Desktop/Uni/Cung/Master BA/Sem 2/Technique in Business Analytics/cleaned_engagement_data_combined.csv")
+
+cleaned_products_info <- read.csv("F:/OneDrive - Macquarie University/Desktop/Uni/Cung/Master BA/Sem 2/Technique in Business Analytics/cleaned_products_info.csv")
+
+engagement_dis_info <- read.csv("F:/OneDrive - Macquarie University/Desktop/Uni/Cung/Master BA/Sem 2/Technique in Business Analytics/engagement_dis_info.csv")
+
+engagement_product_info <- read.csv("F:/OneDrive - Macquarie University/Desktop/Uni/Cung/Master BA/Sem 2/Technique in Business Analytics/engagement_product_info.csv")
+
+total_cleaned_dataset<- read.csv("F:/OneDrive - Macquarie University/Desktop/Uni/Cung/Master BA/Sem 2/Technique in Business Analytics/total_cleaned_dataset.csv")
+```
+
+- Removing the cleaning data for more memory space
+```{r}
+rm(dis_info)
+rm(products_info)
+rm(engagement_data_combined)
+```
+
+## Cleaned_products_info
+
+- Product Sectors in the Dataset : **Who's the target for the available product?**
+
+```{r simple-plot, echo=FALSE}
+# Group by Sector1 and count the number of providers
+product_sector1 <- cleaned_products_info %>%
+  group_by(Sector.s.) %>%
+  summarise(n = n_distinct(Provider.Company.Name)) %>%
+  arrange(desc(n))
+
+# Create a bar chart
+  ggplot(product_sector1, aes(x = reorder(Sector.s., n), y = n, fill = n)) +
+  geom_bar(stat = 'identity') +
+  coord_flip() +
+  scale_fill_gradient(low = "lightblue", high = "steelblue") +
+  theme_wsj() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        plot.title = element_text(size = 13, face = "bold"), 
+        plot.subtitle = element_text(size = 12.5, face = "italic"),
+        axis.title.x = element_text(size = 12), axis.title.y = element_text(size = 12),
+        axis.text.x = element_text(size=9.8),
+        legend.title=element_text(size = 12)) +
+  scale_x_discrete(name="Sector")+
+  scale_y_discrete(name="Number of Providers")+
+  ggtitle("Number of Providers.", subtitle="Source: LearnPlatform COVID-19 Impact") +
+  theme(legend.position="bottom")
+
+```
+
+
+> The most important part of the products available on the Dataset are focusing on **the PreK-12 kids**, meaning usually 3-year-olds through 12th grade students. With an amount of over a hundred providers have an interested in this field.
+
+- Product Category in the Dataset : **What is the primary utilization of the product available?**
+
+```{r echo=FALSE}
+# Get the top 10 categories
+top_10 <- cleaned_products_info %>%
+  count(primary_function) %>%
+  arrange(desc(n)) %>%
+  head(10)
+
+# Create a bar plot
+ggplot(top_10, aes(x = reorder(primary_function, n), y = n, fill = n)) +
+  geom_bar(stat = 'identity') +
+  geom_text(aes(label = n), hjust = -0.1, size = 3) +
+  coord_flip() +
+  scale_fill_gradient(low = "#4cc9f0", high = "#f72585") +
+  theme_wsj() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        plot.title = element_text(size = 13, face = "bold"), 
+        plot.subtitle = element_text(size = 12.5, face = "italic"),
+        axis.title.x = element_text(size = 12), axis.title.y = element_text(size = 12),
+        axis.text.x = element_text(size=9.8),
+        legend.title=element_text(size = 12)) +
+  scale_x_discrete(name="Primary Essential Function")+
+  scale_y_discrete(name="Number of observations")+
+  ggtitle("Top 10 Primary Essential Functions.", subtitle="Source: LearnPlatform COVID-19 Impact") +
+  theme(legend.position="bottom")
+
+```
+
+> The Products Category available, which we will call “**Primary Essential Functions**”, helps to define the purpose of the product in use. Within these Categories, we identify the following main categories: LC for Learning and Curriculum representing learning platform and other tools helping to teach the students, CM for Classroom Management, SDO for School & District Operation dedicated for school operation & administration. The Share of product dedicated to the **Learning and Curriculum** part, engaging directly students represents the higher proportion of the product available in the dataset, representing **more than 200 Products** and take an account **more than 70%**.  This already giving an insight on the **utilization and engagement** within the United States.
+
+
+- **Showing the Top 10 utilization for the main Categories (LC, CM and SDO)**
+
+```{r echo=FALSE}
+# Get the top 10 categories
+top_10 <- cleaned_products_info %>%
+  count(func) %>%
+  arrange(desc(n)) %>%
+  head(10)
+
+# Create a bar plot
+ggplot(top_10, aes(x = reorder(func, n), y = n, fill=n)) +
+  geom_bar(stat = 'identity') +
+  coord_flip() +
+  scale_fill_gradient(low = "#4cc9f0", high = "#f72585") +
+  theme_wsj() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        plot.title = element_text(size = 12, face = "bold"), 
+        plot.subtitle = element_text(size = 11, face = "italic"),
+        axis.title.x = element_text(size = 11), axis.title.y = element_text(size = 11),
+        axis.text.x = element_text(size=6.5),
+        axis.text.y = element_text(size=6.5),
+        legend.title=element_text(size = 10)) +
+  scale_x_discrete(name="Sub Primary Essential Function")+
+  scale_y_discrete(name="Number of observations")+
+  ggtitle("Top 10 Sub Primary Essential Functions.", subtitle="Source: LearnPlatform COVID-19 Impact") +
+  theme(legend.position="bottom")
+
+
+```
+
+> The subcategory of “**Primary Essential Functions**” will be called “Sub Primary Essential Functions” and **represents a deeper level of** understanding on the purpose of the product listed and the last degree of product categorization. Within all the product available we can see that **Digital Learning Platforms** is the category gathering the higher volume of product reaching almost over **60 observations** of the overall product available in the Dataset, doubled than the third positions, which is “Content Creation & Curation”.  Interestingly the categorization “**Learning & Curriculum**” is the one containing **the most important part** of the product available in terms of utilization during the year 2020.
+
+- **Short look on the provider available and type of product proposed (Limited to TOP 10)**
+
+```{r echo=FALSE}
+# Get the top 10 categories
+top_10 <- cleaned_products_info %>%
+  count(Provider.Company.Name) %>%
+  arrange(desc(n)) %>%
+  head(10)
+
+# Create a bar plot
+ggplot(top_10, aes(x = reorder(Provider.Company.Name, n), y = n, fill=n)) +
+  geom_bar(stat = 'identity') +
+  coord_flip() +
+  scale_fill_gradient(low = "lightblue", high = "steelblue") +
+  theme_wsj() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        plot.title = element_text(size = 13, face = "bold"), 
+        plot.subtitle = element_text(size = 12.5, face = "italic"),
+        axis.title.x = element_text(size = 12), axis.title.y = element_text(size = 12),
+        axis.text.x = element_text(size=8),
+        axis.text.y = element_text(size=8),
+        legend.title=element_text(size = 12)) +
+  scale_x_discrete(name="Most famous Provider Company")+
+  scale_y_discrete(name="Number of observations")+
+  ggtitle("Top 10 most famous Provider company.", subtitle="Source: LearnPlatform COVID-19 Impact") +
+  theme(legend.position="bottom")
+```
+
+> In terms of quantity of products available overall inside of the Dataset, we already remark **a strong presence of Google LLC**. By limiting the analysis in Percentage to the TOP 10 Providers, we see clearly in predominance of Google LLC, representing nearly 50% of the products available, clearly distancing on other big players such as Microsoft, Houghton Mifflin Harcourt. 
+
+- **The most In-demand Product**
+
+```{r echo=FALSE}
+# Count the frequency of each product
+product_counts <- table(total_cleaned_dataset$Product.Name)
+
+# Convert to a dataframe
+df_product_counts <- as.data.frame(table(total_cleaned_dataset$Product.Name))
+colnames(df_product_counts) <- c("Product.Name", "Frequency")
+
+# Sort by frequency and select top 5
+df_product_counts <- df_product_counts %>%
+  arrange(desc(Frequency)) %>%
+  head(10)
+
+# Create the bar plot
+ggplot(df_product_counts, aes(x=reorder(Product.Name, -Frequency), y=Frequency, fill=Frequency))+
+  geom_bar(stat="identity") +
+  coord_flip() +
+  scale_fill_gradient(low = "#4cc9f0", high = "#f72585") +
+theme_wsj() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        plot.title = element_text(size = 13, face = "bold"), 
+        plot.subtitle = element_text(size = 12.5, face = "italic"),
+        axis.title.x = element_text(size = 12), axis.title.y = element_text(size = 12),
+        axis.text.x = element_text(size=8),
+        axis.text.y = element_text(size=8),
+        legend.title=element_text(size = 12)) +
+  scale_x_discrete(name="Most indemand Products for consumers")+
+  scale_y_discrete(name="Number of observations")+
+  ggtitle("Top 10 most indemand Products for consumers.", subtitle="Source: LearnPlatform COVID-19 Impact") +
+  theme(legend.position="bottom")
+```
+
+> It will be interesting as well to have a look on the spectrum of product proposed by **Google** in order to check which products is **the most favor** to use for consumers. We observed that **Google LLC** is present in every branch of products proposed with a diverse range of products to offer for customers to help them study in the aspects of LC (Learning and Curriculum and Classroom Management). 
+
+## Cleaned_districts_info
+
+- **Define where are most of the district located?**
+
+```{r echo=FALSE}
+# Group by locale and count the number of districts
+district_analysis <- cleaned_districts_info %>%
+  count(locale)
+
+# Calculate the percentage for each locale
+district_analysis$percent_local <- district_analysis$n / sum(district_analysis$n)
+
+# Create a pie chart
+ggplot(district_analysis, aes(x = "", y = percent_local, fill = locale)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = c("City" = "#023e8a", "Suburban" = "#0077b6", "Rural" = "#0096c7", "Town" = "#48cae4" )) +
+  theme_void() +
+   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        plot.title = element_text(size = 13, face = "bold"), 
+        plot.subtitle = element_text(size = 12.5, face = "italic"),
+        ) +
+  ggtitle("The most type of district located.", subtitle="Source: LearnPlatform COVID-19 Impact") +
+  theme(legend.position="bottom")+
+  geom_text(aes(label = scales::percent(percent_local)), position = position_stack(vjust = 0.6),angle = 45) +
+  labs(fill = "Locale")
+```
+
+> The overall repartition of all the district help to clearly identify that most of the district for which we are having data available are in the **Suburban area**.
+
+- **Analyze the equality between City and Rural areas**
+
+```{r echo=FALSE}
+# Group by state and count the unique district_id
+district_state <- cleaned_districts_info %>%
+  group_by(state) %>%
+  summarise(n = n_distinct(district_id)) %>%
+  arrange(desc(n))
+
+# Create a bar chart
+ggplot(district_state, aes(x = reorder(state, n), y = n, , fill = n)) +
+  geom_bar(stat = 'identity') +
+  coord_flip() +
+  scale_fill_gradient(low = "#4cc9f0", high = "#f72585") +
+  theme_wsj() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        plot.title = element_text(size = 12, face = "bold"), 
+        plot.subtitle = element_text(size = 11, face = "italic"),
+        axis.title.x = element_text(size = 11), axis.title.y = element_text(size = 11),
+        axis.text.x = element_text(size=6.5),
+        axis.text.y = element_text(size=6.5),
+        legend.title=element_text(size = 10)) +
+  scale_x_discrete(name="State")+
+  scale_y_discrete(name="Number of Districts")+
+  ggtitle("Number of Districts per State.", subtitle="Source: LearnPlatform COVID-19 Impact") +
+  theme(legend.position="bottom")+
+  geom_text(aes(label = n), hjust = -0.1, size = 2, fontface = "italic")
+```
+
+> The number of districts available per state should help us as well to identify which information we should consider carrefully. Indeed, the **higher the representation of 1 specific state is, the higher will be its impact on the overall analyze**. Education, products and other services like socio-economic measure, are mostly taken by one State and could differ from one state to the other. The goal of the visualization below is as well to identify potential biase which the reader must be taken aware of. This presenting a limitation of the overall result.
+
+> The above representation clearly shows an **over-representation** of the states of **Connecticut, Utah, Massachussets and Illioins** within the dataset. With respectively 30, 29, 21 and 18 districts represented for the engagement of the product and software in use. Now that the information of the district per state is available we will as well have a look on the repartition of the district for each states in term of geo-sociologic information.
+
+> Product being part of the Learning and Curriculum category are representing the higher part of the product available. **3 states** are over represented within the data available **representing a biase and limitation** of the analyze of the situation, focusing on 3 states mainly the data cannot be used to take out clear statement in term of the connectivity and engagement whithin the US. We should use this information later in order to **pay attention in the graphical representation** and potentially using mean values when it comes to deeper engagement analyze or comparison between 1 state to the other. **Most of the district** data information gathered are representing **a suburban area**.
+
+- **Analyze the characteristics across different locale**
+```{r echo=FALSE}
+# Group by locale and calculate the average engagement index and percentages
+# Count the number of occurrences of each category in each locale
+df_grouped <- cleaned_districts_info %>%
+  group_by(locale, pct_black.hispanic, pct_free.reduced) %>%
+  summarise(count = n())
+
+# Reshape the data for the bar plot
+df_melted <- reshape2::melt(df_grouped, id.vars = c("locale", "pct_black.hispanic", "pct_free.reduced"))
+
+# Create the bar plot
+ggplot(df_melted, aes(x=locale, y=value, fill=variable)) +
+  geom_bar(stat="identity", position="dodge") +
+  theme_wsj() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        plot.title = element_text(size = 12, face = "bold"), 
+        plot.subtitle = element_text(size = 11, face = "italic"),
+        axis.title.x = element_text(size = 11), axis.title.y = element_text(size = 11),
+        axis.text.x = element_text(size=6.5),
+        axis.text.y = element_text(size=6.5),
+        legend.title=element_text(size = 10)) +
+  scale_x_discrete(name="Locale")+
+  scale_y_discrete(name="Number of observations")+
+  ggtitle("Number of Occurrences by Locale.", subtitle="Source: LearnPlatform COVID-19 Impact") +
+  theme(legend.position="bottom")
+ 
+#Barchart for pct_black.hispanic Across Different Locales
+  df_grouped <- cleaned_districts_info %>%
+  group_by(locale, pct_black.hispanic) %>%
+  summarise(count = n())
+
+# Create the bar plot
+ggplot(df_grouped, aes(x=pct_black.hispanic, y=count, fill=locale)) +
+  geom_bar(stat="identity", position="dodge") +
+  scale_fill_manual(values = c("City" = "#023e8a", "Suburban" = "#0077b6", "Rural" = "#0096c7", "Town" = "#48cae4" )) +
+  theme_wsj() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        plot.title = element_text(size = 12, face = "bold"), 
+        plot.subtitle = element_text(size = 11, face = "italic"),
+        axis.title.x = element_text(size = 11), axis.title.y = element_text(size = 11),
+        axis.text.x = element_text(size=6.5),
+        axis.text.y = element_text(size=6.5),
+        legend.title=element_text(size = 10)) +
+  scale_x_discrete(name="State")+
+  scale_y_continuous(name="Number of Districts")+
+  ggtitle("Number of Districts per State.", subtitle="Source: LearnPlatform COVID-19 Impact") +
+  theme(legend.position="bottom")+
+  labs(title="Number of Occurrences of pct_black.hispanic Across Different Locale", x="pct_black.hispanic", y="Count")
+
+#Barchart for pct_free.reduced Across Different Locales
+df_grouped <- cleaned_districts_info %>%
+  group_by(locale, pct_free.reduced) %>%
+  summarise(count = n())
+
+# Create the bar plot
+ggplot(df_grouped, aes(x=pct_free.reduced, y=count, fill=locale)) +
+  geom_bar(stat="identity", position="dodge") +
+  scale_fill_manual(values = c("City" = "#023e8a", "Suburban" = "#0077b6", "Rural" = "#0096c7", "Town" = "#48cae4" )) +
+  theme_wsj() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        plot.title = element_text(size = 12, face = "bold"), 
+        plot.subtitle = element_text(size = 11, face = "italic"),
+        axis.title.x = element_text(size = 11), axis.title.y = element_text(size = 11),
+        axis.text.x = element_text(size=6.5),
+        axis.text.y = element_text(size=6.5),
+        legend.title=element_text(size = 10)) +
+  scale_x_discrete(name="State")+
+  scale_y_continuous(name="Number of Districts")+
+  ggtitle("Number of Districts per State.", subtitle="Source: LearnPlatform COVID-19 Impact") +
+  theme(legend.position="bottom")+
+  labs(title="Number of Occurrences of pct_free.reduced Across Different Locales", x="pct_free.reduced", y="Count") 
+```
+
+> **Number of Occurrences by Locale**: This chart is a grouped bar chart that shows the count of observations for each locale, broken down by the variables 'pct_black.hispanic' and 'pct_free.reduced'. This gives an overview of the dataset's composition in terms of locale and these two demographic indicators. It can help identify which locales have more data points and how these data points are distributed in terms of the percentage of black/Hispanic students and the percentage of students eligible for free/reduced lunch. 
+
+> **Number of Occurrences of pct_black.hispanic Across Different Locales**: This chart is a grouped bar chart that shows the count of districts for each percentage of black/Hispanic students, broken down by locale. This provides a detailed view of the racial composition of students in different locales. For example, if a particular locale has a high count for a high percentage of black/Hispanic students, it indicates that this locale has a high proportion of districts with a high percentage of black/Hispanic students. This can be useful for understanding racial disparities in education across different locales.
+
+> **Number of Occurrences of pct_free.reduced Across Different Locales**: This chart is a grouped bar chart that shows the count of districts for each percentage of students eligible for free/reduced lunch, broken down by locale. This provides a detailed view of the socio-economic status of students in different locales. For example, if a particular locale has a high count for a high percentage of students eligible for free/reduced lunch, it indicates that this locale has a high proportion of districts with a high percentage of economically disadvantaged students. This can be useful for understanding socio-economic disparities in education across different locales.
+
+> In summary, these charts provide a **detailed breakdown** of the dataset in terms of locale, racial composition, and socio-economic status. They can be used to identify patterns and disparities in the data, which can inform decision-making and policy development in education. 
+
+- **Analyze the correlation between percentage access and engagement index.**
+```{r echo=FALSE}
+ggplot(data=cleaned_engagement_combined) +
+  geom_point(mapping=aes(x = pct_access, y = engagement_index), alpha=1/2 , color="#0077b6") + 
+  theme_wsj() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        plot.title = element_text(size = 12, face = "bold"), 
+        plot.subtitle = element_text(size = 11, face = "italic"),
+        axis.title.x = element_text(size = 11), axis.title.y = element_text(size = 11),
+        axis.text.x = element_text(size=6.5),
+        axis.text.y = element_text(size=6.5),
+        legend.title=element_text(size = 10)) +
+  scale_x_continuous(name="Percentage of students accessing")+
+  scale_y_continuous(name="Engagement index")+
+  ggtitle("Engagement Index in Relation to Student Access Percentage.", subtitle="Source: LearnPlatform COVID-19 Impact") +
+  theme(legend.position="bottom")
+```
+
+> This scatter plot visualizes the **relationship** between the percentage of students accessing (pct_access) and the engagement index. Each point on the plot represents a data point in the dataset, with its x-coordinate representing the percentage of students accessing and its y-coordinate representing the engagement index. The transparency of the points (alpha=1/2) allows for the density of the data to be visible, where darker areas indicate a higher density of points, i.e., more data points with similar values. From this plot, we can observe and analyze the correlation between student access percentage and engagement index. As the points tend to rise as they move from left to right, this indicates **a positive correlation**, with higher access percentages associated with higher engagement indices. Therefore, with **a slightly positive correlation** is observed, it could suggest that **increasing access to learning materials might improve student engagement**. However, it's important to remember that correlation does not imply causation, and other factors could be influencing these variables.
+
+
+## cleaned_engagement_combined
+
+- **Evolution of the Engagement Index in 2020 in the USA.**
+
+> The evolution of the engagement index per category level 1 (LC, SDO, CM), already analyzed before should provide us as well a taste of the type of product mostly used within the educational system.
+
+```{r echo=FALSE}
+# Convert 'time' to Date format
+total_cleaned_dataset$time <- as.Date(total_cleaned_dataset$time)
+
+# Extract month and year from 'time'
+total_cleaned_dataset$month <- month(total_cleaned_dataset$time)
+total_cleaned_dataset$year <- year(total_cleaned_dataset$time)
+
+# Group by 'month', 'year' and 'Primary.Essential.Function' and calculate mean 'engagement_index'
+grouped <- total_cleaned_dataset %>%
+  group_by(month, year, primary_function) %>%
+  summarise(mean_engagement_index = mean(engagement_index, na.rm = TRUE)) %>%
+  ungroup()
+
+# Remove rows with NA in 'main_function'
+total_cleaned_dataset <- total_cleaned_dataset %>% drop_na(primary_function)
+# Create a new date column for plotting
+grouped$date <- as.Date(paste(grouped$year, grouped$month, "01", sep = "-"))
+
+# Plot
+ggplot(grouped, aes(x = date, y = mean_engagement_index, color = primary_function)) +
+  geom_line() +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b %Y") +
+  theme_wsj() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        plot.title = element_text(size = 12, face = "bold"), 
+        plot.subtitle = element_text(size = 11, face = "italic"),
+        axis.title.x = element_text(size = 11), axis.title.y = element_text(size = 11),
+        axis.text.x = element_text(size=6.5),
+        axis.text.y = element_text(size=6.5),
+        legend.title=element_text(size = 10)) +
+  scale_x_date(name="Time", date_breaks = "1 month", date_labels = "%b %Y") +
+  scale_y_continuous(name="Mean Engagement Index", labels = scales::comma) +
+  ggtitle("Student Engagement with Different Types of Education Technology.", subtitle="Source: LearnPlatform COVID-19 Impact") +
+  theme(legend.position="bottom", axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+> The trend for the “primary function” is **the same as** for the overall engagement index. We can identify **2 important waves** with an almost flat curve corresponding with the summer holidays. In the past graphic representation dedicated to the repartition of the type of product available, where LC product were having the higher share, we see that this is as well reflected in term of engagement index.
+
+> The product related to the **Learning and Curriculum part** are representing the higher part in term of total engagement index. Unsurprisingly nevertheless, as LC Product engaged foremost the student for which the dataset is as well dedicated. Interestingly as well, we observe that the classroom management is registering an higher utilization (in term of engagement).
+
+- **Analyze the impact of social support and ethnicity.**
+
+```{r echo=FALSE}
+library(reshape2)
+# Create a table with counts of each combination of 'pct_free.reduced' and 'pp_total_raw'
+tab <- table(cleaned_districts_info$pct_free.reduced, cleaned_districts_info$pp_total_raw)
+
+# Convert the table to a dataframe
+df_tab <- as.data.frame(tab)
+
+# Convert the dataframe to long format
+df_long <- melt(df_tab)
+
+# Create a heatmap
+ggplot(df_long, aes(x=Var1, y=Var2, fill=value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_wsj() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        plot.title = element_text(size = 12, face = "bold"), 
+        plot.subtitle = element_text(size = 11, face = "italic"),
+        axis.title.x = element_text(size = 11), axis.title.y = element_text(size = 11),
+        axis.text.x = element_text(size=6.5),
+        axis.text.y = element_text(size=6.5),
+        legend.title=element_text(size = 10)) +
+  scale_x_discrete(name="Percentage of Free/Reduced") +
+  scale_y_discrete(name="Total Raw PP") +
+  ggtitle("Matrix Diagram of Percentage of Free/Reduced and Total Raw PP.", subtitle="Source: LearnPlatform COVID-19 Impact") +
+  theme(legend.position="bottom")
+
+#Barchart to Count the number of occurrences of each category in 'pp_total_raw'
+counts <- table(cleaned_districts_info$pp_total_raw)
+
+# Convert the table to a dataframe
+df_counts <- as.data.frame(counts)
+
+# Rename the columns
+colnames(df_counts) <- c("pp_total_raw", "count")
+
+# Order the dataframe by count in descending order and take the top 5
+df_counts <- df_counts %>% arrange(desc(count)) %>% head(5)
+
+# Create a bar chart
+ggplot(df_counts, aes(x = reorder(pp_total_raw, -count), y = count)) +
+  geom_bar(stat = "identity") +
+ theme_wsj() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        plot.title = element_text(size = 12, face = "bold"), 
+        plot.subtitle = element_text(size = 11, face = "italic"),
+        axis.title.x = element_text(size = 11), axis.title.y = element_text(size = 11),
+        axis.text.x = element_text(size=6.5),
+        axis.text.y = element_text(size=6.5),
+        legend.title=element_text(size = 10)) +
+  scale_x_discrete(name="Total Raw PP") +
+  scale_y_discrete(name="Number of observations") +
+  ggtitle("Top 5 Categories of Total Raw PP.", subtitle="Source: LearnPlatform COVID-19 Impact") +
+  theme(legend.position="bottom")
+
+```
+
+> The matrix diagram (or heatmap) visualizes the relationship between two categorical variables, in this case ‘pct_free.reduced’ and ‘pp_total_raw’. Each cell in the matrix corresponds to a combination of categories from the two variables. The color of the cell represents the count of observations for that combination, with darker colors indicating higher counts.. We can clearly see that  Per-pupil total expenditure (sum of local and federal expenditure) of the range from **6000 – 18000** thousand is the range that has seen **the most observations** for the Percentage of students in the districts eligible for free or reduced-price lunch, in which **8000 – 10000** are the group that have been taken care the most.
+
+> On the other hand, this bar chart displays the **five most common categories** of total raw per-pupil spending ('pp_total_raw') in the dataset. This chart provides a clear and concise view of the distribution of per-pupil spending across the districts in the dataset., which help us to levels of per-pupil spending are most common, which can be useful for understanding the overall landscape of school funding.  
+
+> In summary, these charts provide a detailed view of the relationship between socio-economic status (as indicated by 'pct_free.reduced') and school funding (as indicated by 'pp_total_raw').
+
+
+\newpage
+
+
+# Findings
+
+> It has certainly been as well a chance for key actors/providers in the market in term of share but foremost shows a predominance of Google LLC in term of share of the percentage of the overall engagement index during the year 2020 but as well in term of number of products available or made available by the brand.  Google LLC's dominance suggests that its products are well-received by the districts represented in the dataset. This could be due to the quality of Google's products, their ease of use, their integration with other Google services, or other factors. Moreover, the dominance of the "Learning and Curriculum" category indicates that the primary use of edtech products is to support teaching and learning processes. These could include tools for content delivery, assessment, student collaboration, and other aspects of the learning process and new enterprise should focus on these area to achieve their growth.
+
+> Especially, the fact that most of the products are targeted towards PreK-12 students suggests that edtech providers see a significant market opportunity in this demographic. This could be due to the large number of students in this age group and the increasing recognition of the importance of technology in education.  An important factor need to be take into consideration is that the positive correlation between student access and engagement suggests that ensuring students have access to learning materials is a key factor in promoting engagement. 
+
+> All in all, the engagement index evolve during 2020 tremendously and reached a pick within the second part of the year. Even if a spike is visible during the 1st quarter, the summer vacation but as well as the decrease of Covid case shows the different during the last part of the year reaching for the main area of Educational software a difference about a significant increasing has happened. We could as well explained this situation by a start in the pandemic with infrastructure as well as system not prepare to face such a situation to a system and educational system aware of the potential necessity of going back to home schooling and prepared for this situation once the summer vacation was over. 
+
+> According to the impact of social support and ethnicity on the engagement index, the group between [8000, 16000] per-pupil spending is associated with a higher proportion of students eligible for free or reduced lunch. This finding may indicate that districts are providing additional resources to the group of economically disadvantaged students. Access to affordable internet service is particularly unlikely for members of lower socioeconomic groups and ethnic minorities, and policymakers tend to place less weight on groups whose per-pupil spending is less than six thousand dollars. 
+
+> One potential problem is that, because suburban districts are overrepresented, the analysis might be skewed towards the conditions and trends seen there. For example, compared to rural or urban areas, suburban areas may have better access to technology and more resources for edtech. When interpreting the results, one should consider this potential bias.
+
+
+
+
